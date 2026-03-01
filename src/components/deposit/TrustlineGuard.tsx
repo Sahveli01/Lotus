@@ -1,0 +1,238 @@
+'use client';
+import { useState, useEffect, ReactNode } from 'react';
+import {
+  Asset,
+  TransactionBuilder,
+  Operation,
+  Horizon,
+  BASE_FEE,
+  Networks,
+} from '@stellar/stellar-sdk';
+import { useWallet } from '@/hooks/useWallet';
+import { USDC_ISSUER, ACTIVE_NETWORK, IS_TESTNET } from '@/constants';
+
+type CheckState = 'checking' | 'no-trustline' | 'has-trustline' | 'adding';
+
+async function hasTrustline(publicKey: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`${ACTIVE_NETWORK.HORIZON_URL}/accounts/${publicKey}`);
+    if (!resp.ok) return false;
+    const data = await resp.json() as {
+      balances?: { asset_type: string; asset_code?: string; asset_issuer?: string }[];
+    };
+    return (data.balances ?? []).some(
+      b => b.asset_type !== 'native' && b.asset_code === 'USDC' && b.asset_issuer === USDC_ISSUER
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function buildChangeTrustXdr(publicKey: string): Promise<string> {
+  const server = new Horizon.Server(ACTIVE_NETWORK.HORIZON_URL);
+  const account = await server.loadAccount(publicKey);
+  const asset = new Asset('USDC', USDC_ISSUER);
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: IS_TESTNET ? Networks.TESTNET : Networks.PUBLIC,
+  })
+    .addOperation(Operation.changeTrust({ asset }))
+    .setTimeout(30)
+    .build();
+  return tx.toXDR();
+}
+
+async function submitClassicTx(signedXdr: string): Promise<void> {
+  const resp = await fetch(`${ACTIVE_NETWORK.HORIZON_URL}/transactions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `tx=${encodeURIComponent(signedXdr)}`,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as {
+      extras?: { result_codes?: { transaction?: string } };
+    };
+    throw new Error(err?.extras?.result_codes?.transaction ?? `HTTP ${resp.status}`);
+  }
+}
+
+async function claimFriendbot(publicKey: string): Promise<void> {
+  try {
+    await fetch(
+      `https://friendbot-testnet.stellar.org/give-me-lumens?addr=${publicKey}&asset=USDC:${USDC_ISSUER}`
+    );
+  } catch {
+    // Non-critical — ignore errors
+  }
+}
+
+interface TrustlineGuardProps {
+  children: ReactNode;
+}
+
+export function TrustlineGuard({ children }: TrustlineGuardProps) {
+  const { isConnected, publicKey, signTransaction } = useWallet();
+  const [state, setState] = useState<CheckState>('checking');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isConnected || !publicKey) {
+      setState('checking');
+      return;
+    }
+    setState('checking');
+    hasTrustline(publicKey).then(has => {
+      setState(has ? 'has-trustline' : 'no-trustline');
+    });
+  }, [isConnected, publicKey]);
+
+  // Not connected → let DepositForm handle the connect prompt
+  if (!isConnected) return <>{children}</>;
+
+  if (state === 'checking') {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px 0' }}>
+        <div style={{
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          border: '2px solid var(--border)',
+          borderTopColor: 'var(--gold)',
+          animation: 'spin 0.8s linear infinite',
+          margin: '0 auto 16px',
+        }} />
+        <p style={{
+          fontSize: '0.82rem',
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-body)',
+        }}>
+          Checking USDC trustline…
+        </p>
+      </div>
+    );
+  }
+
+  if (state === 'has-trustline') return <>{children}</>;
+
+  // No trustline — show setup screen
+  const handleAddTrustline = async () => {
+    if (!publicKey) return;
+    setState('adding');
+    setError('');
+    try {
+      const xdr = await buildChangeTrustXdr(publicKey);
+      const signedXdr = await signTransaction(xdr);
+      await submitClassicTx(signedXdr);
+      if (IS_TESTNET) await claimFriendbot(publicKey);
+      setState('has-trustline');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to add trustline');
+      setState('no-trustline');
+    }
+  };
+
+  return (
+    <div style={{ padding: '4px 0' }}>
+      {/* Icon */}
+      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          borderRadius: '50%',
+          background: 'rgba(244,169,59,0.1)',
+          border: '1px solid rgba(244,169,59,0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto',
+          fontSize: '1.4rem',
+        }}>
+          ◈
+        </div>
+      </div>
+
+      {/* Heading */}
+      <h3 style={{
+        fontFamily: 'var(--font-display)',
+        fontSize: '1.2rem',
+        fontWeight: 400,
+        color: 'var(--text-primary)',
+        textAlign: 'center',
+        marginBottom: '10px',
+      }}>
+        USDC Trustline Required
+      </h3>
+
+      {/* Description */}
+      <p style={{
+        fontSize: '0.82rem',
+        color: 'var(--text-secondary)',
+        fontFamily: 'var(--font-body)',
+        lineHeight: 1.7,
+        textAlign: 'center',
+        marginBottom: '8px',
+      }}>
+        Your Stellar account needs a USDC trustline before depositing.
+        This is a one-time setup — you&apos;ll also receive 100 testnet USDC automatically.
+      </p>
+
+      {/* Asset info */}
+      <div style={{
+        background: 'var(--bg-deep)',
+        border: '1px solid var(--border)',
+        borderRadius: '10px',
+        padding: '12px 14px',
+        marginBottom: '20px',
+        fontFamily: 'var(--font-body)',
+        fontSize: '0.75rem',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Asset</span>
+          <span style={{ color: 'var(--text-secondary)' }}>USDC</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Issuer</span>
+          <span style={{ color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
+            {USDC_ISSUER.slice(0, 8)}…{USDC_ISSUER.slice(-6)}
+          </span>
+        </div>
+      </div>
+
+      {/* CTA button */}
+      <button
+        onClick={handleAddTrustline}
+        disabled={state === 'adding'}
+        className="btn-primary"
+        style={{ width: '100%', padding: '13px' }}
+      >
+        {state === 'adding' ? (
+          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <span style={{
+              width: '14px',
+              height: '14px',
+              borderRadius: '50%',
+              border: '2px solid rgba(5,10,20,0.3)',
+              borderTopColor: '#050a14',
+              display: 'inline-block',
+              animation: 'spin 0.7s linear infinite',
+            }} />
+            Adding Trustline…
+          </span>
+        ) : 'Add Trustline + Get 100 USDC'}
+      </button>
+
+      {/* Error */}
+      {error && (
+        <p style={{
+          marginTop: '12px',
+          textAlign: 'center',
+          fontSize: '0.78rem',
+          color: '#f87171',
+          fontFamily: 'var(--font-body)',
+        }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}

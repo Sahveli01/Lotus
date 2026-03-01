@@ -48,3 +48,6 @@ export const LOTUS_CONFIG = {
 
 export const IS_TESTNET = process.env.NEXT_PUBLIC_NETWORK !== 'mainnet';
 export const ACTIVE_CONTRACTS = IS_TESTNET ? CONTRACTS.TESTNET : CONTRACTS.MAINNET;
+
+// USDC issuer (classic Stellar asset, testnet)
+export const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';

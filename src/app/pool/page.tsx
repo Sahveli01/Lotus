@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { PrizePoolCard } from '@/components/pool/PrizePool';
 import { DepositForm } from '@/components/deposit/DepositForm';
 import { WithdrawForm } from '@/components/deposit/WithdrawForm';
+import { TrustlineGuard } from '@/components/deposit/TrustlineGuard';
 
 type Tab = 'deposit' | 'withdraw';
 
@@ -99,7 +100,11 @@ function PoolPageInner() {
               ))}
             </div>
 
-            {activeTab === 'deposit' ? <DepositForm /> : <WithdrawForm />}
+            {activeTab === 'deposit' ? (
+              <TrustlineGuard>
+                <DepositForm />
+              </TrustlineGuard>
+            ) : <WithdrawForm />}
           </div>
 
           {/* Info card */}
