@@ -1,6 +1,7 @@
 import {
   rpc as StellarRpc,
   Networks,
+  Transaction,
   TransactionBuilder,
   BASE_FEE,
   Contract,
@@ -44,8 +45,9 @@ export async function simulateContractCall(
     throw new Error(`Simulation failed: ${simResult.error}`);
   }
 
+  if (!simResult.result?.retval) return null;
   try {
-    return scValToNative(simResult.result!.retval);
+    return scValToNative(simResult.result.retval);
   } catch {
     return null;
   }
@@ -71,7 +73,7 @@ export async function buildContractInvoke(
     .build();
 
   try {
-    const preparedTx = await rpc.prepareTransaction(tx);
+    const preparedTx = await rpc.prepareTransaction(tx) as Transaction;
     return preparedTx;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

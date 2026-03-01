@@ -12,7 +12,7 @@
     "@blend-capital/blend-sdk": "^3.2.2",
     "@creit.tech/stellar-wallets-kit": "^2.0.0",
     "@stellar/freighter-api": "^6.0.1",
-    "@stellar/stellar-sdk": "^13.3.0",
+    "@stellar/stellar-sdk": "^14.5.0",
     "bignumber.js": "^10.0.2",
     "lotus-vault": "file:src/contracts/lotus-vault",
     "next": "16.1.6",
