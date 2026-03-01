@@ -46,7 +46,7 @@ echo "==> Updated $ENV_FILE"
 # ── Initialize ────────────────────────────────────────────────────────────────
 ADMIN_PUBKEY=$(stellar keys address admin)
 BLEND_POOL="${NEXT_PUBLIC_BLEND_USDC_POOL:-}"
-USDC="${USDC_CONTRACT:-CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU}"
+USDC="${USDC_CONTRACT:-CA63EPM4EEXUVUANF6FQUJEJ37RWRYIXCARWFXYUMPP7RLZWFNLTVNR4}"
 DRAW_INTERVAL=60  # 1 minute for testnet
 
 echo "==> Initializing contract..."
