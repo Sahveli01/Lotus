@@ -158,19 +158,37 @@ export async function buildDrawTx(
 
 // ─── Explicit contractId API (for hooks that inject contractId) ───────────────
 
+/** Safe wrapper — returns null instead of throwing on scValToNative parse errors. */
+async function safeSimulate(
+  contractId: string,
+  method: string,
+  args: Parameters<typeof simulateContractCall>[2],
+  callerAddress: string
+): Promise<unknown> {
+  try {
+    return await simulateContractCall(contractId, method, args, callerAddress);
+  } catch (e) {
+    console.error(`[lotus-contract] ${method} failed:`, (e as Error).message);
+    return null;
+  }
+}
+
 export async function getLotusStats(
   contractId: string,
   callerAddress: string
 ): Promise<LotusStats> {
+  const safe = (method: string, args: Parameters<typeof simulateContractCall>[2] = []) =>
+    safeSimulate(contractId, method, args, callerAddress);
+
   const [totalDeposits, prizePool, nextDraw, roundNumber, lastWinner, lastPrize, totalWinners] =
     await Promise.all([
-      simulateContractCall(contractId, 'get_total_deposits', [], callerAddress),
-      simulateContractCall(contractId, 'get_prize_pool', [], callerAddress),
-      simulateContractCall(contractId, 'get_next_draw', [], callerAddress),
-      simulateContractCall(contractId, 'get_round_number', [], callerAddress),
-      simulateContractCall(contractId, 'get_last_winner', [], callerAddress),
-      simulateContractCall(contractId, 'get_last_prize', [], callerAddress),
-      simulateContractCall(contractId, 'get_total_winners', [], callerAddress),
+      safe('get_total_deposits'),
+      safe('get_prize_pool'),
+      safe('get_next_draw'),
+      safe('get_round_number'),
+      safe('get_last_winner'),
+      safe('get_last_prize'),
+      safe('get_total_winners'),
     ]);
 
   return {
@@ -189,7 +207,7 @@ export async function getLotusDeposit(
   userAddress: string,
   callerAddress: string
 ): Promise<bigint> {
-  const result = await simulateContractCall(
+  const result = await safeSimulate(
     contractId,
     'get_deposit',
     [nativeToScVal(userAddress, { type: 'address' })],
@@ -203,7 +221,7 @@ export async function getWinChance(
   userAddress: string,
   callerAddress: string
 ): Promise<number> {
-  const result = await simulateContractCall(
+  const result = await safeSimulate(
     contractId,
     'get_win_chance',
     [nativeToScVal(userAddress, { type: 'address' })],
