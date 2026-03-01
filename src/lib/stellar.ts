@@ -127,6 +127,40 @@ export async function submitTransaction(signedXdr: string) {
   throw new Error(`Transaction ${txHash} timed out after 60 seconds`);
 }
 
+// Fetch USDC balance directly from Horizon — picks the first USDC entry with a
+// non-zero balance, regardless of issuer. This is the fallback for when the SAC
+// contract address doesn't match the issuer the user actually holds tokens from.
+async function fetchHorizonUsdcBalance(publicKey: string): Promise<bigint> {
+  try {
+    const url = `${ACTIVE_NETWORK.HORIZON_URL}/accounts/${publicKey}`;
+    console.log('[USDC] Horizon fallback — fetching:', url);
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.log('[USDC] Horizon response not ok:', resp.status);
+      return 0n;
+    }
+    const data = await resp.json() as {
+      balances?: { asset_type: string; asset_code?: string; balance?: string; asset_issuer?: string }[];
+    };
+    console.log('[USDC] Horizon balances:', JSON.stringify(data.balances ?? []));
+    const usdcEntry = (data.balances ?? []).find(
+      b => b.asset_code === 'USDC' && parseFloat(b.balance ?? '0') > 0
+    );
+    if (!usdcEntry?.balance) {
+      console.log('[USDC] No non-zero USDC entry found in Horizon');
+      return 0n;
+    }
+    console.log(`[USDC] Horizon USDC found: ${usdcEntry.balance} (issuer: ${usdcEntry.asset_issuer})`);
+    // Horizon returns classic format like "937.0000000" — convert to 7-decimal bigint
+    const [whole, fraction = ''] = usdcEntry.balance.split('.');
+    const paddedFraction = fraction.padEnd(7, '0').slice(0, 7);
+    return BigInt(whole) * BigInt(10 ** 7) + BigInt(paddedFraction);
+  } catch (err) {
+    console.log('[USDC] Horizon fetch error:', err);
+    return 0n;
+  }
+}
+
 // Internal helper: checks Horizon for any USDC classic trustline on this account,
 // regardless of issuer. Used as a fallback for zero-balance accounts so the
 // TrustlineGuard "Add Trustline + Request USDC" flow still works for new users.
@@ -146,29 +180,37 @@ async function hasClassicUsdcTrustline(publicKey: string): Promise<boolean> {
 }
 
 // Check whether a user can transfer USDC via the vault's token contract (the SAC).
-// Uses the SAC's balance() as the primary signal — if the user holds any USDC
-// in the SAC, the vault's token_client.transfer will succeed. Classic trustline
-// checks are unreliable here because they depend on USDC_ISSUER matching exactly,
-// and the SAC wraps its own internal issuer independently of that constant.
-// Falls back to any-issuer Horizon check so new users still see the setup UI.
+// Uses the SAC's balance() as the primary signal. Falls back to Horizon (any issuer)
+// so users with a mismatched SAC still see the correct trustline / balance state.
 export async function checkUsdcTrustline(publicKey: string): Promise<boolean> {
+  console.log(`[checkUsdcTrustline] publicKey=${publicKey} sacContract=${ACTIVE_CONTRACTS.USDC}`);
   const sacBalance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, publicKey);
+  console.log(`[checkUsdcTrustline] SAC balance=${sacBalance}`);
   if (sacBalance > 0n) return true;
+  const horizonBalance = await fetchHorizonUsdcBalance(publicKey);
+  console.log(`[checkUsdcTrustline] Horizon balance=${horizonBalance}`);
+  if (horizonBalance > 0n) return true;
   return hasClassicUsdcTrustline(publicKey);
 }
 
-// Return the SAC balance AND trustline state for the deposit pre-flight check.
-// The vault calls token_client.transfer(user, vault, amount) against the SAC,
-// so the SAC balance is the only number that matters — not the Horizon trustline
-// balance (which can reference a different USDC issuer and silently mismatch).
+// Return the best available USDC balance AND trustline state for deposit pre-flight.
+// Priority: SAC balance (needed for vault transfer) → Horizon any-issuer balance
+// (shows real holdings even when the SAC address doesn't match the held issuer).
 export async function getUsdcStatus(
   publicKey: string
 ): Promise<{ hasTrustline: boolean; balance: bigint }> {
-  const balance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, publicKey);
-  // If SAC balance > 0 they clearly have access; otherwise check classic trustline
-  // so we don't block users who have a trustline but happen to hold 0 USDC right now.
-  const hasTrustline = balance > 0n || await hasClassicUsdcTrustline(publicKey);
-  return { hasTrustline, balance };
+  console.log(`[getUsdcStatus] publicKey=${publicKey} sacContract=${ACTIVE_CONTRACTS.USDC}`);
+  const sacBalance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, publicKey);
+  console.log(`[getUsdcStatus] SAC balance=${sacBalance}`);
+  if (sacBalance > 0n) {
+    return { hasTrustline: true, balance: sacBalance };
+  }
+  // SAC returned 0 — the SAC address likely doesn't match the issuer the user holds.
+  // Try Horizon to show the real balance.
+  const horizonBalance = await fetchHorizonUsdcBalance(publicKey);
+  console.log(`[getUsdcStatus] Horizon fallback balance=${horizonBalance}`);
+  const hasTrustline = horizonBalance > 0n || await hasClassicUsdcTrustline(publicKey);
+  return { hasTrustline, balance: horizonBalance };
 }
 
 // Fetch token balance via SAC `balance(address)` — works for any Stellar Asset Contract.
