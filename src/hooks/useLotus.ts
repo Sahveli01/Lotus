@@ -126,7 +126,10 @@ export function useLotus() {
       const txHash = await submitSignedTx(signedDeposit);
 
       setTxStatus({ status: 'success', txHash });
+      // Refresh immediately then again after 3s/6s to catch ledger confirmation
       await Promise.all([loadStats(), refreshBalance()]);
+      setTimeout(() => { loadStats(); refreshBalance(); }, 3000);
+      setTimeout(() => loadStats(), 6000);
       return txHash;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
