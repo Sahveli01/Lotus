@@ -44,7 +44,11 @@ export async function simulateContractCall(
     throw new Error(`Simulation failed: ${simResult.error}`);
   }
 
-  return scValToNative(simResult.result!.retval);
+  try {
+    return scValToNative(simResult.result!.retval);
+  } catch {
+    return null;
+  }
 }
 
 // Build a contract invoke transaction (write)
