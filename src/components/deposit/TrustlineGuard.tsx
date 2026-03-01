@@ -9,7 +9,7 @@ import {
   Networks,
 } from '@stellar/stellar-sdk';
 import { useWallet } from '@/hooks/useWallet';
-import { USDC_ISSUER, ACTIVE_NETWORK, IS_TESTNET } from '@/constants';
+import { USDC_ISSUER, ACTIVE_NETWORK, ACTIVE_CONTRACTS, IS_TESTNET } from '@/constants';
 import { checkUsdcTrustline } from '@/lib/stellar';
 
 type CheckState = 'checking' | 'no-trustline' | 'has-trustline' | 'adding';
@@ -203,10 +203,16 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
           <span style={{ color: 'var(--text-muted)' }}>Asset</span>
           <span style={{ color: 'var(--text-secondary)' }}>USDC</span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
           <span style={{ color: 'var(--text-muted)' }}>Issuer</span>
           <span style={{ color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
             {USDC_ISSUER.slice(0, 8)}…{USDC_ISSUER.slice(-6)}
+          </span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: 'var(--text-muted)' }}>SAC</span>
+          <span style={{ color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
+            {ACTIVE_CONTRACTS.USDC.slice(0, 8)}…{ACTIVE_CONTRACTS.USDC.slice(-6)}
           </span>
         </div>
       </div>
