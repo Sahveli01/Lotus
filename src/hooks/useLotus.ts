@@ -12,7 +12,7 @@ import {
   buildDrawTx,
   submitSignedTx,
 } from '@/lib/lotus-contract';
-import { checkUsdcTrustline, fetchTokenBalance } from '@/lib/stellar';
+import { getUsdcStatus } from '@/lib/stellar';
 
 // Fallback caller for unauthenticated reads
 const READ_ONLY_KEY = 'GDWEQP2WFAIJMWBZUUISEZ5UR5ZFII7HLFWACQRGJTX7NWI2SUZEKQP6';
@@ -95,20 +95,18 @@ export function useLotus() {
     if (!publicKey || !contractId) throw new Error('Wallet not connected');
     setTxStatus({ status: 'pending' });
     try {
-      // Pre-flight: verify classic USDC trustline.
-      // Soroban simulation does NOT enforce classic-asset trustline requirements,
-      // so the tx would simulate fine but fail on-chain with Error(Contract, #13).
-      const hasTrust = await checkUsdcTrustline(publicKey);
-      if (!hasTrust) {
+      // Pre-flight: verify classic USDC trustline + sufficient balance via Horizon.
+      // Soroban simulation does NOT enforce classic-asset trustline requirements
+      // (fails on-chain with Error #13), and SAC balance() simulation can silently
+      // return 0 even when the account holds USDC. Reading from Horizon is reliable.
+      const { hasTrustline, balance: onChainBalance } = await getUsdcStatus(publicKey);
+      if (!hasTrustline) {
         setTxStatus({
           status: 'error',
           error: 'USDC trustline missing. Use the "Add Trustline" button above to set it up first.',
         });
         return '';
       }
-
-      // Pre-flight: verify sufficient on-chain USDC balance.
-      const onChainBalance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, publicKey);
       if (amount > onChainBalance) {
         setTxStatus({
           status: 'error',

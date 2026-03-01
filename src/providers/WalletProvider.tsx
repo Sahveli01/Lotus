@@ -5,8 +5,8 @@ import { FreighterModule, FREIGHTER_ID } from '@creit.tech/stellar-wallets-kit/m
 import { AlbedoModule } from '@creit.tech/stellar-wallets-kit/modules/albedo';
 import { xBullModule } from '@creit.tech/stellar-wallets-kit/modules/xbull';
 import { WalletState } from '@/types';
-import { IS_TESTNET, ACTIVE_CONTRACTS } from '@/constants';
-import { fetchTokenBalance } from '@/lib/stellar';
+import { IS_TESTNET } from '@/constants';
+import { getUsdcStatus } from '@/lib/stellar';
 
 interface WalletContextType {
   walletState: WalletState;
@@ -59,8 +59,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const address = event.payload.address;
       if (address) {
         setWalletState(prev => ({ ...prev, isConnected: true, publicKey: address }));
-        fetchTokenBalance(ACTIVE_CONTRACTS.USDC, address)
-          .then(usdcBalance => setWalletState(prev => ({ ...prev, usdcBalance })))
+        getUsdcStatus(address)
+          .then(({ balance }) => setWalletState(prev => ({ ...prev, usdcBalance: balance })))
           .catch(() => {});
       } else {
         setWalletState(defaultWalletState);
@@ -72,7 +72,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(async () => {
     ensureKit();
     const { address } = await StellarWalletsKit.authModal();
-    const usdcBalance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, address).catch(() => 0n);
+    const { balance: usdcBalance } = await getUsdcStatus(address).catch(() => ({ hasTrustline: false, balance: 0n }));
     setWalletState(prev => ({
       ...prev,
       isConnected: true,

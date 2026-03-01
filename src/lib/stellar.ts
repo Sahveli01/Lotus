@@ -146,6 +146,38 @@ export async function checkUsdcTrustline(publicKey: string): Promise<boolean> {
   }
 }
 
+// Read USDC trustline state AND balance from Horizon in a single request.
+// Much more reliable than Soroban simulation for classic-asset balances:
+// simulation can silently fail (seq mismatch, SAC state issues) and return 0n
+// even when the account actually holds USDC.
+export async function getUsdcStatus(
+  publicKey: string
+): Promise<{ hasTrustline: boolean; balance: bigint }> {
+  try {
+    const resp = await fetch(`${ACTIVE_NETWORK.HORIZON_URL}/accounts/${publicKey}`);
+    if (!resp.ok) return { hasTrustline: false, balance: 0n };
+    const data = await resp.json() as {
+      balances?: {
+        asset_type: string;
+        asset_code?: string;
+        asset_issuer?: string;
+        balance?: string;
+      }[];
+    };
+    const entry = (data.balances ?? []).find(
+      b => b.asset_type !== 'native' && b.asset_code === 'USDC' && b.asset_issuer === USDC_ISSUER
+    );
+    if (!entry) return { hasTrustline: false, balance: 0n };
+    // Horizon returns balance as e.g. "10.0000000" — convert to 7-decimal bigint
+    const [whole, fraction = ''] = (entry.balance ?? '0').split('.');
+    const paddedFraction = fraction.padEnd(7, '0').slice(0, 7);
+    const balance = BigInt(whole) * 10_000_000n + BigInt(paddedFraction);
+    return { hasTrustline: true, balance };
+  } catch {
+    return { hasTrustline: false, balance: 0n };
+  }
+}
+
 // Fetch token balance via SAC `balance(address)` — works for any Stellar Asset Contract.
 // Returns 0n if the account has no trustline or the call fails.
 export async function fetchTokenBalance(

@@ -1,14 +1,14 @@
 // Network
 export const NETWORK = {
   TESTNET: {
-    RPC_URL: 'https://soroban-testnet.stellar.org',
-    HORIZON_URL: 'https://horizon-testnet.stellar.org',
+    RPC_URL: process.env.NEXT_PUBLIC_STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org',
+    HORIZON_URL: process.env.NEXT_PUBLIC_HORIZON_URL || 'https://horizon-testnet.stellar.org',
     PASSPHRASE: 'Test SDF Network ; September 2015',
     FRIENDBOT_URL: 'https://friendbot.stellar.org',
   },
   MAINNET: {
-    RPC_URL: 'https://mainnet.sorobanrpc.com',
-    HORIZON_URL: 'https://horizon.stellar.org',
+    RPC_URL: process.env.NEXT_PUBLIC_STELLAR_RPC_URL || 'https://mainnet.sorobanrpc.com',
+    HORIZON_URL: process.env.NEXT_PUBLIC_HORIZON_URL || 'https://horizon.stellar.org',
     PASSPHRASE: 'Public Global Stellar Network ; September 2015',
   },
 } as const;
@@ -49,5 +49,8 @@ export const LOTUS_CONFIG = {
 export const IS_TESTNET = process.env.NEXT_PUBLIC_NETWORK !== 'mainnet';
 export const ACTIVE_CONTRACTS = IS_TESTNET ? CONTRACTS.TESTNET : CONTRACTS.MAINNET;
 
-// USDC issuer (classic Stellar asset, testnet)
-export const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+// USDC classic asset issuer — switches with network so trustline checks always
+// compare against the correct issuer. Mixing these causes silent auth failures.
+export const USDC_ISSUER = IS_TESTNET
+  ? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5' // SDF testnet USDC
+  : 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'; // Circle mainnet USDC
