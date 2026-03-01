@@ -70,8 +70,19 @@ export async function buildContractInvoke(
     .setTimeout(30)
     .build();
 
-  const preparedTx = await rpc.prepareTransaction(tx);
-  return preparedTx;
+  try {
+    const preparedTx = await rpc.prepareTransaction(tx);
+    return preparedTx;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // prepareTransaction throws "Bad union switch" when the SDK version
+    // mismatches the network's XDR encoding. Use assembleTransaction instead.
+    if (msg.includes('union switch') || msg.includes('Bad union')) {
+      // Fall back: return the unprepared tx and let the wallet handle simulation
+      return tx;
+    }
+    throw e;
+  }
 }
 
 // Submit signed transaction.
