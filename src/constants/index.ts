@@ -52,5 +52,5 @@ export const ACTIVE_CONTRACTS = IS_TESTNET ? CONTRACTS.TESTNET : CONTRACTS.MAINN
 // USDC classic asset issuer — switches with network so trustline checks always
 // compare against the correct issuer. Mixing these causes silent auth failures.
 export const USDC_ISSUER = IS_TESTNET
-  ? 'GCKIUOTK3NWD33ONH7TQERCSLECXLWQMA377HSJR4E2MV7KPQFAQLOLN' // testnet USDC
+  ? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5' // testnet USDC (wraps CAQCFVLOBK5...)
   : 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'; // Circle mainnet USDC

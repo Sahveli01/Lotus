@@ -80,7 +80,10 @@ export function DepositForm() {
           borderRadius: '10px',
         }}>
           <p style={{ fontSize: '0.79rem', color: 'var(--text-muted)', fontFamily: 'var(--font-body)', lineHeight: 1.6, margin: 0 }}>
-            No USDC in your wallet. Add the USDC asset in Freighter (Assets → Add Asset) then fund your account via{' '}
+            Your wallet shows 0 USDC for this vault. The vault uses USDC issued by{' '}
+            <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>GBBD47…LFLA5</span>.
+            {' '}Use the <strong style={{ color: 'var(--text-secondary)' }}>Add Trustline</strong> button above to set up the correct trustline,
+            then fund via{' '}
             <a
               href="https://laboratory.stellar.org/#account-creator?network=test"
               target="_blank"
@@ -88,7 +91,8 @@ export function DepositForm() {
               style={{ color: 'var(--gold)', textDecoration: 'none' }}
             >
               Stellar Lab
-            </a>.
+            </a>{' '}
+            with issuer <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5</span>.
           </p>
         </div>
       )}
