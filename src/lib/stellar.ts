@@ -154,7 +154,9 @@ export async function checkUsdcTrustline(publicKey: string): Promise<boolean> {
   const sacBalance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, publicKey);
   console.log(`[checkUsdcTrustline] SAC balance=${sacBalance}`);
   if (sacBalance > 0n) return true;
-  return hasUsdcIssuerTrustline(publicKey);
+  const hasTrustline = await hasUsdcIssuerTrustline(publicKey);
+  console.log(`[checkUsdcTrustline] Horizon trustline=${hasTrustline}`);
+  return hasTrustline;
 }
 
 // Return the SAC USDC balance and whether the correct issuer trustline exists.

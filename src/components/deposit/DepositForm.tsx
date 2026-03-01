@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { parseUSDC, formatUSDC } from '@/lib/stellar';
 import { useLotus } from '@/hooks/useLotus';
 import { useWallet } from '@/hooks/useWallet';
-import { LOTUS_CONFIG } from '@/constants';
+import { LOTUS_CONFIG, IS_TESTNET, USDC_ISSUER } from '@/constants';
 
 const QUICK_AMOUNTS = [10, 50, 100, 500];
 
@@ -80,19 +80,25 @@ export function DepositForm() {
           borderRadius: '10px',
         }}>
           <p style={{ fontSize: '0.79rem', color: 'var(--text-muted)', fontFamily: 'var(--font-body)', lineHeight: 1.6, margin: 0 }}>
-            Your wallet shows 0 USDC for this vault. The vault uses USDC issued by{' '}
-            <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>GBBD47…LFLA5</span>.
-            {' '}Use the <strong style={{ color: 'var(--text-secondary)' }}>Add Trustline</strong> button above to set up the correct trustline,
-            then fund via{' '}
-            <a
-              href="https://laboratory.stellar.org/#account-creator?network=test"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: 'var(--gold)', textDecoration: 'none' }}
-            >
-              Stellar Lab
-            </a>{' '}
-            with issuer <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5</span>.
+            {IS_TESTNET ? (
+              <>
+                Your wallet has 0 testnet USDC. To deposit, fund your account:{' '}
+                <a
+                  href="https://laboratory.stellar.org/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--gold)', textDecoration: 'none' }}
+                >
+                  Stellar Lab ↗
+                </a>
+                {' '}— asset code <code style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>USDC</code>,
+                issuer <code style={{ fontFamily: 'monospace', fontSize: '0.68rem' }}>{USDC_ISSUER}</code>.
+              </>
+            ) : (
+              <>Your wallet has 0 USDC. Send USDC (issuer{' '}
+                <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>{USDC_ISSUER.slice(0, 8)}…{USDC_ISSUER.slice(-6)}</span>)
+                to your Stellar address to start depositing.</>
+            )}
           </p>
         </div>
       )}

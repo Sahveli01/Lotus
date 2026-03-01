@@ -12,7 +12,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { USDC_ISSUER, ACTIVE_NETWORK, ACTIVE_CONTRACTS, IS_TESTNET } from '@/constants';
 import { checkUsdcTrustline } from '@/lib/stellar';
 
-type CheckState = 'checking' | 'no-trustline' | 'has-trustline' | 'adding';
+type CheckState = 'checking' | 'no-trustline' | 'has-trustline' | 'adding' | 'trustline-verified';
 
 async function buildChangeTrustXdr(publicKey: string): Promise<string> {
   const server = new Horizon.Server(ACTIVE_NETWORK.HORIZON_URL);
@@ -42,17 +42,6 @@ async function submitClassicTx(signedXdr: string): Promise<void> {
   }
 }
 
-async function claimFriendbot(publicKey: string): Promise<boolean> {
-  try {
-    const resp = await fetch(
-      `https://friendbot-testnet.stellar.org/give-me-lumens?addr=${publicKey}&asset=USDC:${USDC_ISSUER}`
-    );
-    return resp.ok;
-  } catch {
-    return false;
-  }
-}
-
 interface TrustlineGuardProps {
   children: ReactNode;
 }
@@ -68,9 +57,16 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
       return;
     }
     setState('checking');
-    checkUsdcTrustline(publicKey).then(has => {
-      setState(has ? 'has-trustline' : 'no-trustline');
-    });
+    checkUsdcTrustline(publicKey)
+      .then(has => {
+        console.log('[TrustlineGuard] trustline check result:', has);
+        setState(has ? 'has-trustline' : 'no-trustline');
+      })
+      .catch(err => {
+        console.error('[TrustlineGuard] trustline check failed:', err);
+        // If the check throws, assume no trustline so the user can set one up
+        setState('no-trustline');
+      });
   }, [isConnected, publicKey]);
 
   // Not connected → let DepositForm handle the connect prompt
@@ -101,6 +97,99 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
 
   if (state === 'has-trustline') return <>{children}</>;
 
+  // Trustline just successfully added — show confirmation before revealing form
+  if (state === 'trustline-verified') {
+    return (
+      <div style={{ padding: '4px 0' }}>
+        {/* Icon */}
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            background: 'rgba(74,222,128,0.1)',
+            border: '1px solid rgba(74,222,128,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto',
+            fontSize: '1.4rem',
+            color: '#4ade80',
+          }}>
+            ✓
+          </div>
+        </div>
+
+        <h3 style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: '1.2rem',
+          fontWeight: 400,
+          color: 'var(--text-primary)',
+          textAlign: 'center',
+          marginBottom: '10px',
+        }}>
+          Trustline Set Up!
+        </h3>
+
+        <p style={{
+          fontSize: '0.82rem',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-body)',
+          lineHeight: 1.7,
+          textAlign: 'center',
+          marginBottom: '16px',
+        }}>
+          Your account now accepts USDC ({USDC_ISSUER.slice(0, 8)}…{USDC_ISSUER.slice(-6)}).
+          {IS_TESTNET && ' You need testnet USDC before you can deposit.'}
+        </p>
+
+        {IS_TESTNET && (
+          <div style={{
+            background: 'var(--bg-deep)',
+            border: '1px solid var(--border)',
+            borderRadius: '10px',
+            padding: '14px 16px',
+            marginBottom: '20px',
+            fontFamily: 'var(--font-body)',
+            fontSize: '0.78rem',
+            color: 'var(--text-secondary)',
+            lineHeight: 1.7,
+          }}>
+            <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
+              How to get testnet USDC
+            </strong>
+            <ol style={{ margin: 0, paddingLeft: '18px' }}>
+              <li>Open{' '}
+                <a
+                  href="https://laboratory.stellar.org/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--gold)', textDecoration: 'none' }}
+                >
+                  Stellar Lab ↗
+                </a>
+                {' '}→ Fund Account (get XLM first)</li>
+              <li>Use a testnet DEX or send USDC from another testnet account</li>
+              <li>Asset code: <code style={{ fontFamily: 'monospace' }}>USDC</code>,{' '}
+                issuer: <code style={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                  {USDC_ISSUER.slice(0, 8)}…{USDC_ISSUER.slice(-6)}
+                </code>
+              </li>
+            </ol>
+          </div>
+        )}
+
+        <button
+          onClick={() => setState('has-trustline')}
+          className="btn-primary"
+          style={{ width: '100%', padding: '13px' }}
+        >
+          Continue to Deposit →
+        </button>
+      </div>
+    );
+  }
+
   // No trustline — show setup screen
   const handleAddTrustline = async () => {
     if (!publicKey) return;
@@ -111,14 +200,7 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
       const signedXdr = await signTransaction(xdr);
       await submitClassicTx(signedXdr);
 
-      // On testnet, attempt to auto-fund 100 USDC via SDF friendbot
-      let gotUsdc = false;
-      if (IS_TESTNET) {
-        gotUsdc = await claimFriendbot(publicKey);
-      }
-
-      // Re-verify the trustline is actually present on Horizon (don't trust state alone)
-      // Poll briefly because the classic ledger may need a moment to confirm
+      // Poll Horizon briefly to confirm the trustline is live
       let verified = false;
       for (let i = 0; i < 6; i++) {
         await new Promise(r => setTimeout(r, 2000));
@@ -127,15 +209,9 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
       }
 
       if (verified) {
-        setState('has-trustline');
-        if (IS_TESTNET && !gotUsdc) {
-          setError(
-            'Trustline added! Your USDC faucet request may have failed — ' +
-            'get testnet USDC at laboratory.stellar.org or from a testnet DEX.'
-          );
-        }
+        setState('trustline-verified');
       } else {
-        setError('Trustline transaction submitted but not yet confirmed. Please wait and refresh.');
+        setError('Transaction submitted but not yet confirmed. Please wait and refresh.');
         setState('no-trustline');
       }
     } catch (e) {
@@ -186,7 +262,7 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
         marginBottom: '8px',
       }}>
         Your Stellar account needs a USDC trustline before depositing.
-        This is a one-time setup.{IS_TESTNET && ' We\'ll also try to send you 100 testnet USDC via faucet.'}
+        This is a one-time setup.
       </p>
 
       {/* Asset info */}
@@ -237,16 +313,16 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
             }} />
             Adding Trustline…
           </span>
-        ) : IS_TESTNET ? 'Add Trustline + Request USDC' : 'Add USDC Trustline'}
+        ) : 'Add USDC Trustline'}
       </button>
 
-      {/* Error / info message */}
+      {/* Error message */}
       {error && (
         <p style={{
           marginTop: '12px',
           textAlign: 'center',
           fontSize: '0.78rem',
-          color: error.startsWith('Trustline added') ? 'var(--gold)' : '#f87171',
+          color: '#f87171',
           fontFamily: 'var(--font-body)',
           lineHeight: 1.5,
         }}>
