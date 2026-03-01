@@ -116,7 +116,7 @@ export async function submitTransaction(signedXdr: string) {
     await new Promise(r => setTimeout(r, 2000));
     const txResult = await rpc.getTransaction(txHash);
     if (txResult.status === 'SUCCESS') {
-      return { success: true, txHash, result: txResult };
+      return { success: true, txHash };
     }
     if (txResult.status === 'FAILED') {
       throw new Error(`Transaction failed on-chain: ${txHash}`);
@@ -150,13 +150,9 @@ async function hasUsdcIssuerTrustline(publicKey: string): Promise<boolean> {
 // correct trustline exists and is funded) OR the correct issuer trustline is present
 // but the account just has a zero balance.
 export async function checkUsdcTrustline(publicKey: string): Promise<boolean> {
-  console.log(`[checkUsdcTrustline] publicKey=${publicKey} sacContract=${ACTIVE_CONTRACTS.USDC}`);
   const sacBalance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, publicKey);
-  console.log(`[checkUsdcTrustline] SAC balance=${sacBalance}`);
   if (sacBalance > 0n) return true;
-  const hasTrustline = await hasUsdcIssuerTrustline(publicKey);
-  console.log(`[checkUsdcTrustline] Horizon trustline=${hasTrustline}`);
-  return hasTrustline;
+  return hasUsdcIssuerTrustline(publicKey);
 }
 
 // Return the SAC USDC balance and whether the correct issuer trustline exists.
@@ -165,9 +161,7 @@ export async function checkUsdcTrustline(publicKey: string): Promise<boolean> {
 export async function getUsdcStatus(
   publicKey: string
 ): Promise<{ hasTrustline: boolean; balance: bigint }> {
-  console.log(`[getUsdcStatus] publicKey=${publicKey} sacContract=${ACTIVE_CONTRACTS.USDC}`);
   const sacBalance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, publicKey);
-  console.log(`[getUsdcStatus] SAC balance=${sacBalance}`);
   if (sacBalance > 0n) {
     return { hasTrustline: true, balance: sacBalance };
   }

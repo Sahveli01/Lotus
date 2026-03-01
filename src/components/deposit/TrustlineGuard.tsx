@@ -59,11 +59,9 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
     setState('checking');
     checkUsdcTrustline(publicKey)
       .then(has => {
-        console.log('[TrustlineGuard] trustline check result:', has);
         setState(has ? 'has-trustline' : 'no-trustline');
       })
-      .catch(err => {
-        console.error('[TrustlineGuard] trustline check failed:', err);
+      .catch(() => {
         // If the check throws, assume no trustline so the user can set one up
         setState('no-trustline');
       });

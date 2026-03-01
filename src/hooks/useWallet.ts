@@ -2,7 +2,7 @@
 import { useWalletContext } from '@/providers/WalletProvider';
 
 export function useWallet() {
-  const { walletState, connect, disconnect, signTransaction } = useWalletContext();
+  const { walletState, connect, disconnect, signTransaction, refreshBalance } = useWalletContext();
 
   return {
     isConnected: walletState.isConnected,
@@ -13,5 +13,6 @@ export function useWallet() {
     connect,
     disconnect,
     signTransaction,
+    refreshBalance,
   };
 }

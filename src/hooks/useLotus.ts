@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWallet } from './useWallet';
 import type { PrizePool, UserPosition, TransactionStatus } from '@/types';
 import { ACTIVE_CONTRACTS, LOTUS_CONFIG } from '@/constants';
@@ -35,18 +35,20 @@ const DEFAULT_POSITION: UserPosition = {
 };
 
 export function useLotus() {
-  const { publicKey, signTransaction } = useWallet();
+  const { publicKey, signTransaction, refreshBalance } = useWallet();
   const contractId = ACTIVE_CONTRACTS.LOTUS_VAULT;
 
   const [prizePool, setPrizePool] = useState<PrizePool>(DEFAULT_PRIZE_POOL);
   const [userPosition, setUserPosition] = useState<UserPosition>(DEFAULT_POSITION);
   const [txStatus, setTxStatus] = useState<TransactionStatus>({ status: 'idle' });
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const loadingRef = useRef(false);
 
   // ── Load on-chain state ──────────────────────────────────────────────────
 
   const loadStats = useCallback(async () => {
-    if (!contractId) return;
+    if (!contractId || loadingRef.current) return;
+    loadingRef.current = true;
     setIsLoadingStats(true);
     try {
       const caller = publicKey ?? READ_ONLY_KEY;
@@ -76,10 +78,11 @@ export function useLotus() {
       } else {
         setUserPosition(DEFAULT_POSITION);
       }
-    } catch (err) {
-      console.error('[useLotus] loadStats failed:', err);
+    } catch {
+      // swallow — UI stays on last good data
     } finally {
       setIsLoadingStats(false);
+      loadingRef.current = false;
     }
   }, [contractId, publicKey]);
 
@@ -123,7 +126,7 @@ export function useLotus() {
       const txHash = await submitSignedTx(signedDeposit);
 
       setTxStatus({ status: 'success', txHash });
-      await loadStats();
+      await Promise.all([loadStats(), refreshBalance()]);
       return txHash;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -136,7 +139,7 @@ export function useLotus() {
       });
       throw err;
     }
-  }, [publicKey, contractId, signTransaction, loadStats]);
+  }, [publicKey, contractId, signTransaction, loadStats, refreshBalance]);
 
   const withdraw = useCallback(async (amount: bigint): Promise<string> => {
     if (!publicKey || !contractId) throw new Error('Wallet not connected');
@@ -147,7 +150,7 @@ export function useLotus() {
       const txHash = await submitSignedTx(signedWithdraw);
 
       setTxStatus({ status: 'success', txHash });
-      await loadStats();
+      await Promise.all([loadStats(), refreshBalance()]);
       return txHash;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -160,7 +163,7 @@ export function useLotus() {
       });
       throw err;
     }
-  }, [publicKey, contractId, signTransaction, loadStats]);
+  }, [publicKey, contractId, signTransaction, loadStats, refreshBalance]);
 
   const executeDraw = useCallback(async (participants: string[]): Promise<string> => {
     if (!publicKey || !contractId) throw new Error('Wallet not connected');

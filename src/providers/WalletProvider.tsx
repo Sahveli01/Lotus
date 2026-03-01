@@ -13,6 +13,7 @@ interface WalletContextType {
   connect: () => Promise<void>;
   disconnect: () => void;
   signTransaction: (xdr: string) => Promise<string>;
+  refreshBalance: () => Promise<void>;
 }
 
 const defaultWalletState: WalletState = {
@@ -28,6 +29,7 @@ const WalletContext = createContext<WalletContextType>({
   connect: async () => {},
   disconnect: () => {},
   signTransaction: async () => '',
+  refreshBalance: async () => {},
 });
 
 export const useWalletContext = () => useContext(WalletContext);
@@ -87,6 +89,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWalletState(defaultWalletState);
   }, []);
 
+  const refreshBalance = useCallback(async () => {
+    const address = walletState.publicKey;
+    if (!address) return;
+    const { balance } = await getUsdcStatus(address).catch(() => ({ hasTrustline: false, balance: 0n }));
+    setWalletState(prev => ({ ...prev, usdcBalance: balance }));
+  }, [walletState.publicKey]);
+
   const signTransaction = useCallback(async (xdr: string): Promise<string> => {
     if (!walletState.publicKey) throw new Error('Wallet not connected');
     const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, {
@@ -99,7 +108,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [walletState.publicKey]);
 
   return (
-    <WalletContext.Provider value={{ walletState, connect, disconnect, signTransaction }}>
+    <WalletContext.Provider value={{ walletState, connect, disconnect, signTransaction, refreshBalance }}>
       {children}
     </WalletContext.Provider>
   );
