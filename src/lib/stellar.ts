@@ -7,7 +7,7 @@ import {
   scValToNative,
   nativeToScVal,
 } from '@stellar/stellar-sdk';
-import { ACTIVE_NETWORK, IS_TESTNET } from '@/constants';
+import { ACTIVE_NETWORK, IS_TESTNET, USDC_ISSUER } from '@/constants';
 
 // RPC Server instance
 export const getRpcServer = () => new StellarRpc.Server(ACTIVE_NETWORK.RPC_URL, {
@@ -125,6 +125,25 @@ export async function submitTransaction(signedXdr: string) {
     attempts++;
   }
   throw new Error(`Transaction ${txHash} timed out after 60 seconds`);
+}
+
+// Check if a Stellar account has the required USDC classic trustline.
+// This MUST be called before deposit because Soroban simulation does not enforce
+// classic-asset trustline requirements — only on-chain execution does (Error #13).
+// Returns false on any network error (safe: TrustlineGuard will show setup UI).
+export async function checkUsdcTrustline(publicKey: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`${ACTIVE_NETWORK.HORIZON_URL}/accounts/${publicKey}`);
+    if (!resp.ok) return false;
+    const data = await resp.json() as {
+      balances?: { asset_type: string; asset_code?: string; asset_issuer?: string }[];
+    };
+    return (data.balances ?? []).some(
+      b => b.asset_type !== 'native' && b.asset_code === 'USDC' && b.asset_issuer === USDC_ISSUER
+    );
+  } catch {
+    return false;
+  }
 }
 
 // Fetch token balance via SAC `balance(address)` — works for any Stellar Asset Contract.

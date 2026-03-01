@@ -10,23 +10,9 @@ import {
 } from '@stellar/stellar-sdk';
 import { useWallet } from '@/hooks/useWallet';
 import { USDC_ISSUER, ACTIVE_NETWORK, IS_TESTNET } from '@/constants';
+import { checkUsdcTrustline } from '@/lib/stellar';
 
 type CheckState = 'checking' | 'no-trustline' | 'has-trustline' | 'adding';
-
-async function hasTrustline(publicKey: string): Promise<boolean> {
-  try {
-    const resp = await fetch(`${ACTIVE_NETWORK.HORIZON_URL}/accounts/${publicKey}`);
-    if (!resp.ok) return false;
-    const data = await resp.json() as {
-      balances?: { asset_type: string; asset_code?: string; asset_issuer?: string }[];
-    };
-    return (data.balances ?? []).some(
-      b => b.asset_type !== 'native' && b.asset_code === 'USDC' && b.asset_issuer === USDC_ISSUER
-    );
-  } catch {
-    return false;
-  }
-}
 
 async function buildChangeTrustXdr(publicKey: string): Promise<string> {
   const server = new Horizon.Server(ACTIVE_NETWORK.HORIZON_URL);
@@ -56,13 +42,14 @@ async function submitClassicTx(signedXdr: string): Promise<void> {
   }
 }
 
-async function claimFriendbot(publicKey: string): Promise<void> {
+async function claimFriendbot(publicKey: string): Promise<boolean> {
   try {
-    await fetch(
+    const resp = await fetch(
       `https://friendbot-testnet.stellar.org/give-me-lumens?addr=${publicKey}&asset=USDC:${USDC_ISSUER}`
     );
+    return resp.ok;
   } catch {
-    // Non-critical — ignore errors
+    return false;
   }
 }
 
@@ -81,7 +68,7 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
       return;
     }
     setState('checking');
-    hasTrustline(publicKey).then(has => {
+    checkUsdcTrustline(publicKey).then(has => {
       setState(has ? 'has-trustline' : 'no-trustline');
     });
   }, [isConnected, publicKey]);
@@ -123,8 +110,34 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
       const xdr = await buildChangeTrustXdr(publicKey);
       const signedXdr = await signTransaction(xdr);
       await submitClassicTx(signedXdr);
-      if (IS_TESTNET) await claimFriendbot(publicKey);
-      setState('has-trustline');
+
+      // On testnet, attempt to auto-fund 100 USDC via SDF friendbot
+      let gotUsdc = false;
+      if (IS_TESTNET) {
+        gotUsdc = await claimFriendbot(publicKey);
+      }
+
+      // Re-verify the trustline is actually present on Horizon (don't trust state alone)
+      // Poll briefly because the classic ledger may need a moment to confirm
+      let verified = false;
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        verified = await checkUsdcTrustline(publicKey);
+        if (verified) break;
+      }
+
+      if (verified) {
+        setState('has-trustline');
+        if (IS_TESTNET && !gotUsdc) {
+          setError(
+            'Trustline added! Your USDC faucet request may have failed — ' +
+            'get testnet USDC at laboratory.stellar.org or from a testnet DEX.'
+          );
+        }
+      } else {
+        setError('Trustline transaction submitted but not yet confirmed. Please wait and refresh.');
+        setState('no-trustline');
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add trustline');
       setState('no-trustline');
@@ -173,7 +186,7 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
         marginBottom: '8px',
       }}>
         Your Stellar account needs a USDC trustline before depositing.
-        This is a one-time setup — you&apos;ll also receive 100 testnet USDC automatically.
+        This is a one-time setup.{IS_TESTNET && ' We\'ll also try to send you 100 testnet USDC via faucet.'}
       </p>
 
       {/* Asset info */}
@@ -218,17 +231,18 @@ export function TrustlineGuard({ children }: TrustlineGuardProps) {
             }} />
             Adding Trustline…
           </span>
-        ) : 'Add Trustline + Get 100 USDC'}
+        ) : IS_TESTNET ? 'Add Trustline + Request USDC' : 'Add USDC Trustline'}
       </button>
 
-      {/* Error */}
+      {/* Error / info message */}
       {error && (
         <p style={{
           marginTop: '12px',
           textAlign: 'center',
           fontSize: '0.78rem',
-          color: '#f87171',
+          color: error.startsWith('Trustline added') ? 'var(--gold)' : '#f87171',
           fontFamily: 'var(--font-body)',
+          lineHeight: 1.5,
         }}>
           {error}
         </p>

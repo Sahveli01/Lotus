@@ -12,6 +12,7 @@ import {
   buildDrawTx,
   submitSignedTx,
 } from '@/lib/lotus-contract';
+import { checkUsdcTrustline, fetchTokenBalance } from '@/lib/stellar';
 
 // Fallback caller for unauthenticated reads
 const READ_ONLY_KEY = 'GDWEQP2WFAIJMWBZUUISEZ5UR5ZFII7HLFWACQRGJTX7NWI2SUZEKQP6';
@@ -94,6 +95,28 @@ export function useLotus() {
     if (!publicKey || !contractId) throw new Error('Wallet not connected');
     setTxStatus({ status: 'pending' });
     try {
+      // Pre-flight: verify classic USDC trustline.
+      // Soroban simulation does NOT enforce classic-asset trustline requirements,
+      // so the tx would simulate fine but fail on-chain with Error(Contract, #13).
+      const hasTrust = await checkUsdcTrustline(publicKey);
+      if (!hasTrust) {
+        setTxStatus({
+          status: 'error',
+          error: 'USDC trustline missing. Use the "Add Trustline" button above to set it up first.',
+        });
+        return '';
+      }
+
+      // Pre-flight: verify sufficient on-chain USDC balance.
+      const onChainBalance = await fetchTokenBalance(ACTIVE_CONTRACTS.USDC, publicKey);
+      if (amount > onChainBalance) {
+        setTxStatus({
+          status: 'error',
+          error: `Insufficient USDC balance. You have ${Number(onChainBalance) / 1e7} USDC on-chain.`,
+        });
+        return '';
+      }
+
       // The vault calls token::Client::transfer(user → vault) internally.
       // Soroban auth covers the token transfer inside the same transaction —
       // no separate SEP-41 `approve` call is needed.
@@ -110,7 +133,7 @@ export function useLotus() {
       setTxStatus({
         status: 'error',
         error: isTrustline
-          ? 'No USDC trustline on this account. In Freighter: go to Assets → Add Asset → search USDC.'
+          ? 'USDC trustline missing. Use the "Add Trustline" button above to set it up first.'
           : msg,
       });
       throw err;

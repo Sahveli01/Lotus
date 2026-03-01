@@ -32,7 +32,9 @@ export function DepositForm() {
     if (amount.trim() && numAmount > 0) amountBigInt = parseUSDC(amount);
   } catch { /* ignore */ }
 
-  const hasInsufficientBalance = amountBigInt > 0n && usdcBalance > 0n && amountBigInt > usdcBalance;
+  // Bug fix: the old condition `usdcBalance > 0n &&` made the check always false when
+  // balance is 0, allowing users with no USDC to submit (which fails on-chain).
+  const hasInsufficientBalance = amountBigInt > 0n && amountBigInt > usdcBalance;
 
   // Estimated win chance if this deposit is added to the pool
   const estimatedWinChance =
